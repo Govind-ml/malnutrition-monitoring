@@ -1,5 +1,4 @@
-pandas
-streamlit
-sqlalchemy
-plotly
-python-dateutil
+Flask==2.3.2
+Flask-SQLAlchemy==3.0.3
+python-dateutil==2.8.2
+pandas==2.2.2

@@ -1,0 +1,183 @@
+<!-- templates/index.html -->
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Malnutrition Dashboard — Real-time</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 18px;
+        }
+
+        .col {
+            display: inline-block;
+            vertical-align: top;
+            margin-right: 24px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            padding: 12px;
+            border-radius: 6px;
+            width: 420px;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin-top: 8px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 8px 12px;
+        }
+
+        pre {
+            background: #f6f6f6;
+            padding: 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Malnutrition Monitoring — Real-time Input & Analysis</h1>
+
+    <div class="col">
+        <div class="card">
+            <h3>Create child</h3>
+            <label>Name <input id="child_name" /></label>
+            <label>Date of birth <input id="child_dob" type="date" /></label>
+            <label>Sex
+                <select id="child_sex">
+                    <option value="male">male</option>
+                    <option value="female">female</option>
+                </select>
+            </label>
+            <button onclick="createChild()">Create</button>
+            <div id="createChildRes"></div>
+        </div>
+
+        <div class="card">
+            <h3>Add daily intake</h3>
+            <label>Child ID <input id="intake_child_id" /></label>
+            <label>Date <input id="intake_date" type="date" /></label>
+            <label>Total calories <input id="intake_cal" type="number" /></label>
+            <label>Total protein (g) <input id="intake_protein" type="number" /></label>
+            <label>Meal items (JSON array)<small> e.g. [{"food":"rice","qty_g":100,"kcal":130}]</small>
+                <textarea id="intake_items" rows="3">[{"food":"rice","qty_g":100,"kcal":130}]</textarea></label>
+            <button onclick="submitIntake()">Submit Intake & Get Recommendation</button>
+            <div id="intakeResult"></div>
+        </div>
+
+        <div class="card">
+            <h3>Add OPD report</h3>
+            <label>Child ID <input id="opd_child_id" /></label>
+            <label>Date <input id="opd_date" type="date" /></label>
+            <label>Weight (kg) <input id="opd_weight" type="number" step="0.1" /></label>
+            <label>Height (cm) <input id="opd_height" type="number" step="0.1" /></label>
+            <label>MUAC (cm) <input id="opd_muac" type="number" step="0.1" /></label>
+            <label>Notes <textarea id="opd_notes"></textarea></label>
+            <button onclick="submitOPD()">Submit OPD & Get Recommendation</button>
+            <div id="opdResult"></div>
+        </div>
+    </div>
+
+    <div class="col">
+        <div class="card">
+            <h3>Dashboard / Charts</h3>
+            <label>Child ID for charts <input id="chart_child_id" value="1" /></label>
+            <button onclick="loadCharts()">Load Charts</button>
+            <h4>Weight Trend</h4>
+            <canvas id="weightChart" width="500" height="240"></canvas>
+            <h4>Calorie Intake</h4>
+            <canvas id="calChart" width="500" height="240"></canvas>
+        </div>
+
+        <div class="card">
+            <h3>Latest Recommendation (real-time)</h3>
+            <div id="recommendJSON"><em>No recommendation yet.</em></div>
+        </div>
+    </div>
+
+    <script>
+        async function createChild() {
+            const payload = {
+                name: document.getElementById('child_name').value,
+                date_of_birth: document.getElementById('child_dob').value,
+                sex: document.getElementById('child_sex').value
+            };
+            const res = await fetch('/api/children', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const j = await res.json();
+            document.getElementById('createChildRes').innerText = "Created child ID: " + j.id;
+            document.getElementById('intake_child_id').value = j.id;
+            document.getElementById('opd_child_id').value = j.id;
+            document.getElementById('chart_child_id').value = j.id;
+        }
+
+        async function submitIntake() {
+            const cid = document.getElementById('intake_child_id').value;
+            const payload = {
+                date: document.getElementById('intake_date').value,
+                meal_items: JSON.parse(document.getElementById('intake_items').value || "[]"),
+                total_calories: Number(document.getElementById('intake_cal').value || 0),
+                total_protein: Number(document.getElementById('intake_protein').value || 0)
+            };
+            const res = await fetch(`/api/children/${cid}/intake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const j = await res.json();
+            document.getElementById('intakeResult').innerHTML = "<pre>" + JSON.stringify(j.recommendation, null, 2) + "</pre>";
+            document.getElementById('recommendJSON').innerHTML = "<pre>" + JSON.stringify(j.recommendation, null, 2) + "</pre>";
+            loadCharts(); // refresh charts immediately
+        }
+
+        async function submitOPD() {
+            const cid = document.getElementById('opd_child_id').value;
+            const payload = {
+                date: document.getElementById('opd_date').value,
+                weight_kg: Number(document.getElementById('opd_weight').value || 0),
+                height_cm: Number(document.getElementById('opd_height').value || 0),
+                muac_cm: Number(document.getElementById('opd_muac').value || 0),
+                notes: document.getElementById('opd_notes').value || ""
+            };
+            const res = await fetch(`/api/children/${cid}/opd`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const j = await res.json();
+            document.getElementById('opdResult').innerHTML = "<pre>" + JSON.stringify(j.recommendation, null, 2) + "</pre>";
+            document.getElementById('recommendJSON').innerHTML = "<pre>" + JSON.stringify(j.recommendation, null, 2) + "</pre>";
+            loadCharts();
+        }
+
+        let weightChart = null, calChart = null;
+        async function loadCharts() {
+            const cid = document.getElementById('chart_child_id').value;
+            // OPD -> weight
+            const opds = await (await fetch(`/api/children/${cid}/opd`)).json();
+            const labels = opds.map(r => r.date);
+            const weights = opds.map(r => r.weight_kg);
+            const ctx = document.getElementById("weightChart").getContext("2d");
+            if (weightChart) weightChart.destroy();
+            weightChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: 'Weight (kg)', data: weights, fill: false }] }, options: {} });
+
+            // Intake -> calories
+            const ints = await (await fetch(`/api/children/${cid}/intake`)).json();
+            const int_labels = ints.map(r => r.date);
+            const cals = ints.map(r => r.total_calories);
+            const ctx2 = document.getElementById("calChart").getContext("2d");
+            if (calChart) calChart.destroy();
+            calChart = new Chart(ctx2, { type: 'bar', data: { labels: int_labels, datasets: [{ label: 'Calories', data: cals }] }, options: {} });
+        }
+    </script>
+</body>
+
+</html>
